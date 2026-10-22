@@ -1345,7 +1345,18 @@ pub fn emit_upsert(
 
     // Build NEW table payload
     let record_reg = program.alloc_register();
+    let rowid_alias_record_reg = rowid_alias_idx.map(|idx| layout.to_register(new_start, idx));
+    if let Some(reg) = rowid_alias_record_reg {
+        program.emit_insn(Insn::SoftNull { reg });
+    }
     emit_make_record(program, table.columns().iter(), new_start, record_reg);
+    if let Some(reg) = rowid_alias_record_reg {
+        program.emit_insn(Insn::Copy {
+            src_reg: new_rowid_reg.unwrap_or(ctx.conflict_rowid_reg),
+            dst_reg: reg,
+            extra_amount: 0,
+        });
+    }
 
     let cdc_wants_before =
         ctx.cdc_table.is_some() && program.capture_data_changes_info().has_before();

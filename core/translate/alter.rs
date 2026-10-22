@@ -2665,6 +2665,9 @@ fn emit_rewrite_table_rows(
         // there is no pre-existing value on the old row image) default to NULL.
         let base_dest_reg = program.alloc_registers_and_init_w_null(non_virtual_column_count);
         for (schema_idx, source_column_idx) in source_column_by_schema_idx.iter().enumerate() {
+            if rewritten_table.columns()[schema_idx].is_rowid_alias() {
+                continue;
+            }
             let Some(source_column_idx) = source_column_idx else {
                 continue;
             };
