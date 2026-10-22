@@ -2298,12 +2298,27 @@ fn emit_update_insns<'a>(
     match &target_table.table {
         Table::BTree(ref table) => {
             let record_reg = program.alloc_register();
+            let rowid_alias_record_reg = if connection.foreign_keys_enabled() {
+                rowid_alias_index.map(|idx| layout.to_register(start, idx))
+            } else {
+                None
+            };
+            if let Some(reg) = rowid_alias_record_reg {
+                program.emit_insn(Insn::SoftNull { reg });
+            }
             emit_make_record(
                 program,
                 target_table.table.columns().iter(),
                 start,
                 record_reg,
             );
+            if let Some(reg) = rowid_alias_record_reg {
+                program.emit_insn(Insn::Copy {
+                    src_reg: effective_rowid_reg,
+                    dst_reg: reg,
+                    extra_amount: 0,
+                });
+            }
 
             if not_exists_check_required {
                 program.emit_insn(Insn::NotExists {
