@@ -1,0 +1,16 @@
+@database :memory:
+
+# Constant expressions in the result list must not run when WHERE filters out
+# the only possible result row.
+test constant_projection_skipped_when_where_is_false {
+    SELECT json('invalid_json') WHERE 0;
+}
+expect {
+}
+
+test constant_projection_still_runs_when_where_is_true {
+    SELECT json('invalid_json') WHERE 1;
+}
+expect error {
+    malformed JSON
+}
