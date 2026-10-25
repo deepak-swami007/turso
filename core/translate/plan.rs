@@ -124,6 +124,50 @@ impl ResultSetColumn {
             return Some(alias);
         }
         match &self.expr {
+            ast::Expr::Column { .. } | ast::Expr::RowId { .. } => {
+                self.resolved_expr_name(&self.expr, tables)
+            }
+            _ => self.implicit_column_name.as_deref(),
+        }
+    }
+
+    /// Returns the column name, falling back to the expression's display form.
+    pub fn name_or_expr(&self, tables: &TableReferences) -> String {
+        self.name(tables)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| self.expr.to_string())
+    }
+
+    /// Returns the CTAS column name, unwrapping parentheses around a direct
+    /// column reference as SQLite does when it creates the table schema.
+    pub fn name_or_expr_for_ctas(&self, tables: &TableReferences) -> String {
+        if let Some(alias) = &self.alias {
+            return alias.clone();
+        }
+
+        let mut expr = &self.expr;
+        while let ast::Expr::Parenthesized(inner) = expr {
+            if inner.len() != 1 {
+                break;
+            }
+            expr = &*inner[0];
+        }
+
+        match expr {
+            ast::Expr::Column { .. } | ast::Expr::RowId { .. } => self
+                .resolved_expr_name(expr, tables)
+                .map(str::to_string)
+                .unwrap_or_else(|| expr.to_string()),
+            _ => self.name_or_expr(tables),
+        }
+    }
+
+    fn resolved_expr_name<'a>(
+        &'a self,
+        expr: &'a ast::Expr,
+        tables: &'a TableReferences,
+    ) -> Option<&'a str> {
+        match expr {
             ast::Expr::Column { table, column, .. } => {
                 if let Some(joined_table_ref) = tables.find_joined_table_by_internal_id(*table) {
                     if let Operation::IndexMethodQuery(module) = &joined_table_ref.op {
@@ -157,15 +201,8 @@ impl ResultSetColumn {
                 // If there is no rowid alias, use "rowid".
                 Some("rowid")
             }
-            _ => self.implicit_column_name.as_deref(),
+            _ => None,
         }
-    }
-
-    /// Returns the column name, falling back to the expression's display form.
-    pub fn name_or_expr(&self, tables: &TableReferences) -> String {
-        self.name(tables)
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| self.expr.to_string())
     }
 
     /// Returns the canonical short type name for this column's affinity,
